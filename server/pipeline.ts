@@ -16,10 +16,45 @@ const execFileAsync = promisify(execFile);
 export type InputFile = { path: string; originalname: string; role: string };
 type Normalized = InputFile & { evidencePath: string; mime: string; pages: number; warning?: string };
 
+const xmlText = (value: string) => value
+  .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+
+async function extractPptxStructure(path: string) {
+  const zip = await JSZip.loadAsync(await readFile(path));
+  const slides = Object.keys(zip.files).filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name))
+    .sort((a, b) => Number(a.match(/slide(\d+)/)?.[1]) - Number(b.match(/slide(\d+)/)?.[1]));
+  const output: string[] = [];
+  for (const [index, name] of slides.entries()) {
+    const xml = (await zip.file(name)?.async("string")) ?? "";
+    output.push(`\n[slide ${index + 1}]`);
+    const shapes = [...xml.matchAll(/<p:sp\b[\s\S]*?<\/p:sp>/g)].map((match) => match[0]);
+    for (const shape of shapes) {
+      const text = [...shape.matchAll(/<a:t>([\s\S]*?)<\/a:t>/g)].map((match) => xmlText(match[1])).join(" ").trim();
+      if (!text) continue;
+      const offset = shape.match(/<a:off\s+x="(\d+)"\s+y="(\d+)"/);
+      const extent = shape.match(/<a:ext\s+cx="(\d+)"\s+cy="(\d+)"/);
+      const sizes = [...shape.matchAll(/\bsz="(\d+)"/g)].map((match) => Number(match[1]) / 100).filter(Number.isFinite);
+      const colours = [...shape.matchAll(/<a:srgbClr\s+val="([0-9A-Fa-f]{6})"/g)].map((match) => `#${match[1].toUpperCase()}`);
+      const metadata = [
+        offset ? `x=${offset[1]},y=${offset[2]}` : "",
+        extent ? `w=${extent[1]},h=${extent[2]}` : "",
+        sizes.length ? `fontPt=${Math.max(...sizes)}` : "",
+        /\sb="1"/.test(shape) ? "bold" : "",
+        colours.length ? `colours=${[...new Set(colours)].join(",")}` : "",
+      ].filter(Boolean).join("; ");
+      output.push(`shape (${metadata || "position unspecified"}): ${text}`);
+    }
+    const tableCells = [...xml.matchAll(/<a:tc\b[\s\S]*?<\/a:tc>/g)].map((cell) => [...cell[0].matchAll(/<a:t>([\s\S]*?)<\/a:t>/g)].map((match) => xmlText(match[1])).join(" ").trim()).filter(Boolean);
+    if (tableCells.length) output.push(`table cells: ${tableCells.join(" | ")}`);
+  }
+  return { text: output.join("\n"), slides: slides.length };
+}
+
 const setStage = (job: Job, stage: Job["stage"], progress: number) => {
   job.stage = stage; job.progress = progress;
-  const payload = { status: job.status, stage, progress, warnings: job.warnings };
+  const payload = { status: job.status, stage, progress, warnings: job.warnings, error: job.error };
   for (const send of job.events) send(payload);
+  void job.onProgress?.(payload);
 };
 const assertActive = (job: Job) => { if (job.abort.signal.aborted) throw new DOMException("Cancelled", "AbortError"); };
 
@@ -31,20 +66,22 @@ export async function normalize(input: InputFile, dir: string): Promise<Normaliz
     return { ...input, evidencePath: target, mime: "application/pdf", pages };
   }
   const pdf = join(dir, `${crypto.randomUUID()}.pdf`);
+  const officeAvailable = process.platform === "win32" && process.env.VERCEL !== "1" && process.env.SERVERLESS_MODE !== "1";
   try {
+    if (!officeAvailable) throw new Error("Office automation is unavailable in serverless mode.");
     await execFileAsync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", join(process.cwd(), "server", "scripts", "convert-office.ps1"), input.path, pdf], { timeout: 180_000 });
     const pages = (await PDFDocument.load(await readFile(pdf), { ignoreEncryption: true })).getPageCount();
     return { ...input, evidencePath: pdf, mime: "application/pdf", pages };
   } catch {
     let text = "";
+    let extractedPages: number | undefined;
     if (ext === ".docx") text = (await mammoth.extractRawText({ path: input.path })).value;
     else {
-      const zip = await JSZip.loadAsync(await readFile(input.path));
-      const slides = Object.keys(zip.files).filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name)).sort();
-      for (const name of slides) text += `\n[${name}]\n${((await zip.file(name)?.async("string")) ?? "").replace(/<a:t>(.*?)<\/a:t>/g, "$1 ").replace(/<[^>]+>/g, " ")}`;
+      const extracted = await extractPptxStructure(input.path);
+      text = extracted.text; extractedPages = extracted.slides;
     }
     const fallback = join(dir, `${crypto.randomUUID()}.txt`); await writeFile(fallback, text);
-    return { ...input, evidencePath: fallback, mime: "text/plain", pages: Math.max(1, Math.ceil(text.length / 3500)), warning: `${input.originalname}: Office-to-PDF conversion failed; text-only evidence was used.` };
+    return { ...input, evidencePath: fallback, mime: "text/plain", pages: extractedPages ?? Math.max(1, Math.ceil(text.length / 3500)), warning: `${input.originalname}: structured direct extraction was used because Office conversion is unavailable; embedded visual evidence may be incomplete.` };
   }
 }
 
@@ -402,6 +439,12 @@ Return only the CurriculumMap JSON.`,
       && !/^Grounding is strictly restricted\b|^No general knowledge\b|^All (?:numerical values|facts|formulas|claims)\b/i.test(warning.trim());
     spec.warnings = spec.warnings.filter(actionableWarning);
     for (const question of spec.questions) question.warnings = question.warnings.filter(actionableWarning);
+    const serverlessMode = process.env.VERCEL === "1" || process.env.SERVERLESS_MODE === "1";
+    if (serverlessMode) {
+      const warning = "Cloud export passed deterministic structural validation; Microsoft PowerPoint visual render verification was not available.";
+      if (!spec.warnings.includes(warning)) spec.warnings.push(warning);
+      if (!job.warnings.includes(warning)) job.warnings.push(warning);
+    }
     await writeFile(join(job.dir, "qa-activity-spec.json"), JSON.stringify({ commandPolicy: appliedCommandPolicy, curriculumMap: appliedCurriculumMap, spec }, null, 2));
     assertActive(job); job.warnings.push(...spec.warnings); setStage(job, "Building decks", 76);
     job.artifacts = await renderDecks(spec, job.dir);
@@ -409,10 +452,14 @@ Return only the CurriculumMap JSON.`,
     const verifyDecks = async () => {
       for (const [index, path] of [job.artifacts.setA, job.artifacts.setB, job.artifacts.answers].entries()) {
         if (!path || (await readFile(path)).length < 10_000) throw new Error(`PowerPoint verification failed for ${basename(path ?? "unknown")}.`);
+        const archive = await JSZip.loadAsync(await readFile(path));
+        const slides = Object.keys(archive.files).filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name));
+        const expected = spec.questions.length + 1;
+        if (slides.length !== expected) throw new Error(`${basename(path)} contains ${slides.length} slides; expected exactly ${expected}.`);
+        if (serverlessMode) continue;
         const renderDir = join(job.dir, `qa-${index}`);
         await execFileAsync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", join(process.cwd(), "server", "scripts", "render-pptx.ps1"), path, renderDir, String(Math.max(72, Number(process.env.CROP_DPI ?? 150)))], { timeout: 180_000 });
         const rendered = (await readdir(renderDir)).filter((name) => name.toLowerCase().endsWith(".png"));
-        const expected = spec.questions.length + 1;
         if (rendered.length !== expected) throw new Error(`${basename(path)} rendered ${rendered.length} slides; expected exactly ${expected}.`);
       }
     };
@@ -425,7 +472,9 @@ Return only the CurriculumMap JSON.`,
   } catch (error) {
     if (job.abort.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) job.status = "cancelled";
     else { job.status = "failed"; job.error = error instanceof Error ? error.message : String(error); }
-    for (const send of job.events) send({ status: job.status, stage: job.stage, progress: job.progress, warnings: job.warnings, error: job.error });
+    const payload = { status: job.status, stage: job.stage, progress: job.progress, warnings: job.warnings, error: job.error };
+    for (const send of job.events) send(payload);
+    void job.onProgress?.(payload);
   } finally {
     if (cleanupAi) await Promise.allSettled(hostedNames.map((name) => cleanupAi!.files.delete({ name })));
     if (job.status === "cancelled") await job.cleanup?.();

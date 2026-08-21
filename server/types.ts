@@ -75,4 +75,5 @@ export type Job = {
   artifacts: Partial<Record<"setA" | "setB" | "answers" | "bundle", string>>;
   events: Set<(payload: object) => void>;
   cleanup?: () => Promise<void>;
+  onProgress?: (payload: { status: JobStatus; stage: Stage; progress: number; warnings: string[]; error?: string }) => void | Promise<void>;
 };

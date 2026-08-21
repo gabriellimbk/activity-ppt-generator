@@ -47,7 +47,6 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   if (checking) return <main className="auth-page"><div className="auth-card"><p>Checking your session…</p></div></main>;
   if (!supabaseConfigured) return <main className="auth-page"><div className="auth-card auth-setup"><p className="eyebrow">Setup required</p><h1>Connect Supabase</h1><p>Add <code>VITE_SUPABASE_URL</code>, <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> and <code>VITE_ALLOWED_EMAIL_DOMAIN</code> to the environment, then restart the app.</p></div></main>;
   if (!session) return <main className="auth-page"><section className="auth-card" aria-labelledby="login-title">
-    <div className="brand-mark" aria-hidden="true">A<span>B</span></div>
     <p className="eyebrow">Teacher sign in</p><h1 id="login-title">Collaborative Activity Generator</h1>
     <p className="auth-intro">Use the six-digit code sent to your email. No password is required.</p>
     {!codeSent ? <form onSubmit={sendCode}>

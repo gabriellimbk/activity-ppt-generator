@@ -5,9 +5,7 @@ body { margin: 0; min-width: 320px; min-height: 100vh; background: radial-gradie
 button, textarea, select { font: inherit; }
 button { cursor: pointer; }
 .app-shell { width: min(1440px, 100%); margin: 0 auto; padding: 38px 46px 52px; }
-.masthead { display: grid; grid-template-columns: auto 1fr auto; gap: 22px; align-items: center; padding: 0 2px 28px; border-bottom: 1px solid #cbd5cd; }
-.brand-mark { width: 64px; height: 64px; display: grid; place-items: center; background: #173f36; color: #fff; border-radius: 18px 18px 6px 18px; font: 800 22px 'Libre Franklin'; letter-spacing: -2px; box-shadow: 0 8px 18px #173f3626; }
-.brand-mark span { color: #f2bd52; }
+.masthead { display: grid; grid-template-columns: 1fr auto; gap: 22px; align-items: center; padding: 0 2px 28px; border-bottom: 1px solid #cbd5cd; }
 .eyebrow { margin: 0 0 5px; text-transform: uppercase; letter-spacing: .16em; font-size: 11px; font-weight: 700; color: #a66a25; }
 h1 { font: 800 clamp(28px, 3vw, 43px)/1.05 'Libre Franklin'; letter-spacing: -.045em; margin: 0; color: #173f36; }
 .subtitle { max-width: 760px; margin: 9px 0 0; color: #687872; font-size: 14px; }
@@ -96,7 +94,6 @@ label { display: block; color: #3c554d; font-weight: 700; font-size: 12px; margi
 .session-bar button, .auth-secondary button { border: 0; border-radius: 7px; padding: 7px 10px; color: #36574e; background: #e3ebe6; font-size: 11px; font-weight: 700; }
 .auth-page { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at 20% 10%, #fff9e8 0, transparent 30%), #edf1ec; }
 .auth-card { width: min(440px, 100%); padding: 34px; border: 1px solid #d1dcd4; border-radius: 20px; background: #fff; box-shadow: 0 22px 60px #173f361b; }
-.auth-card .brand-mark { margin-bottom: 24px; }
 .auth-card h1 { font-size: 31px; margin-bottom: 10px; }
 .auth-intro, .auth-setup p { color: #6e7f79; font-size: 13px; line-height: 1.55; }
 .auth-card input { width: 100%; border: 1px solid #afc0b7; border-radius: 10px; padding: 13px 14px; color: #17322d; background: #fff; outline: 0; }
@@ -107,6 +104,6 @@ label { display: block; color: #3c554d; font-weight: 700; font-size: 12px; margi
 .auth-secondary { display: flex; justify-content: space-between; gap: 10px; margin-top: 12px; }
 .auth-message { margin: 16px 0 0; padding: 10px 12px; border-radius: 8px; color: #5c4a24; background: #fff6dc; font-size: 12px; }
 .auth-setup code { color: #7d4c17; font-size: 11px; }
-@media (max-width: 900px) { .app-shell { padding: 25px 18px 40px; } .content-grid { grid-template-columns: 1fr; } .masthead { grid-template-columns: auto 1fr; } .local-badge { grid-column: 2; justify-self: start; } .downloads { grid-template-columns: repeat(2, 1fr); } .stage-list { grid-template-columns: repeat(4, 1fr); } }
-@media (max-width: 600px) { .workflow { grid-template-columns: 1fr; } .workflow-step { border-right: 0; border-bottom: 1px solid #d3dcd5; } .masthead { align-items: start; } .brand-mark { width: 50px; height: 50px; border-radius: 14px 14px 5px 14px; } .section-heading { align-items: flex-start; flex-direction: column; } .generate-bar { align-items: stretch; flex-direction: column; } .generate { width: 100%; min-width: 0; } .file-card { grid-template-columns: auto minmax(0, 1fr) auto; } .file-card select { grid-column: 2; } }
+@media (max-width: 900px) { .app-shell { padding: 25px 18px 40px; } .content-grid { grid-template-columns: 1fr; } .masthead { grid-template-columns: 1fr; } .local-badge { justify-self: start; } .downloads { grid-template-columns: repeat(2, 1fr); } .stage-list { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 600px) { .workflow { grid-template-columns: 1fr; } .workflow-step { border-right: 0; border-bottom: 1px solid #d3dcd5; } .masthead { align-items: start; } .section-heading { align-items: flex-start; flex-direction: column; } .generate-bar { align-items: stretch; flex-direction: column; } .generate { width: 100%; min-width: 0; } .file-card { grid-template-columns: auto minmax(0, 1fr) auto; } .file-card select { grid-column: 2; } }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }

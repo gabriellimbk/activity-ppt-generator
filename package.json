@@ -7,14 +7,15 @@
   },
   "scripts": {
     "dev": "concurrently -k -n web,api -c cyan,magenta \"vite --host 127.0.0.1\" \"tsx watch server/index.ts\"",
-    "build": "vite build && tsc -p tsconfig.server.json",
+    "build": "vite build && tsc -p tsconfig.server.json && tsc -p tsconfig.api.json",
     "start": "node dist/server/index.js",
     "test": "vitest run",
-    "lint": "eslint src server --max-warnings=0"
+    "lint": "eslint src server api --max-warnings=0"
   },
   "dependencies": {
     "@google/genai": "^1.30.0",
     "@supabase/supabase-js": "^2.57.4",
+    "@vercel/queue": "^0.5.0",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "file-type": "^21.0.0",
@@ -25,6 +26,7 @@
     "pptxgenjs": "^4.0.1",
     "react": "19.2.6",
     "react-dom": "19.2.6",
+    "tus-js-client": "^4.3.1",
     "zod": "^4.1.12"
   },
   "devDependencies": {
@@ -35,6 +37,7 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@types/supertest": "^6.0.3",
+    "@vercel/node": "^5.10.1",
     "@vitejs/plugin-react": "^6.1.0",
     "concurrently": "^9.2.1",
     "eslint": "9.39.4",

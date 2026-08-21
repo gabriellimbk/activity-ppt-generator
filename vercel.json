@@ -1,0 +1,26 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm build",
+  "outputDirectory": "dist/client",
+  "regions": ["sin1"],
+  "functions": {
+    "api/queues/process-activity.ts": {
+      "maxDuration": 300,
+      "memory": 2048,
+      "includeFiles": "assets/templates/**",
+      "experimentalTriggers": [
+        { "type": "queue/v2beta", "topic": "activity-generation" }
+      ]
+    },
+    "api/reference-defaults.ts": {
+      "maxDuration": 30,
+      "includeFiles": "assets/templates/**"
+    },
+    "api/**/*.ts": { "maxDuration": 60 }
+  },
+  "crons": [
+    { "path": "/api/cron/cleanup", "schedule": "17 3 * * *" }
+  ]
+}

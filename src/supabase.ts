@@ -2,6 +2,9 @@ import { createClient } from "@supabase/supabase-js";
 
 const url = import.meta.env.VITE_SUPABASE_URL?.trim();
 const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim();
+export const supabaseUrl = url ?? "";
+export const supabasePublishableKey = publishableKey ?? "";
+export const serverlessMode = import.meta.env.VITE_SERVERLESS_MODE === "true";
 export const allowedEmailDomain = import.meta.env.VITE_ALLOWED_EMAIL_DOMAIN?.trim().toLowerCase().replace(/^@/, "") ?? "";
 
 export const supabaseConfigured = Boolean(

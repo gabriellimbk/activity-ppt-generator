@@ -33,7 +33,10 @@ const allowedMaterials = new Set([".pdf", ".docx", ".pptx"]);
 const allowedSyllabus = new Set([".pdf", ".docx"]);
 const allowedReferences = new Set([".pptx"]);
 const expectedMime: Record<string, string> = { ".pdf": "application/pdf", ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation" };
-const DEFAULT_REFERENCES = ["Set A.pptx", "Set B.pptx", "Ans for Set A and B.pptx"].map((name) => resolve(process.cwd(), "..", "Output", name));
+const DEFAULT_REFERENCE_NAMES = ["Set A.pptx", "Set B.pptx", "Ans for Set A and B.pptx"];
+const bundledReferences = DEFAULT_REFERENCE_NAMES.map((name) => resolve(process.cwd(), "assets", "templates", name));
+const legacyReferences = DEFAULT_REFERENCE_NAMES.map((name) => resolve(process.cwd(), "..", "Output", name));
+const DEFAULT_REFERENCES = bundledReferences.every(existsSync) ? bundledReferences : legacyReferences;
 async function hasValidSignature(file: Express.Multer.File) { const detected = await fileTypeFromFile(file.path); return Boolean(detected && detected.mime === expectedMime[extname(file.originalname).toLowerCase()]); }
 
 function safeOriginal(name: string) { return basename(name).replace(/[<>:"/\\|?*\x00-\x1F]/g, "_").slice(0, 180); }

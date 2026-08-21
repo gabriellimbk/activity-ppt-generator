@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { authFetch } from "./supabase";
+import { authFetch, serverlessMode, supabase } from "./supabase";
+import { acceptedMime, removeCloudInputs, storageSafeName, uploadCloudFile } from "./cloudUploads";
 
 export const DEFAULT_PROMPT = `Create a collaborative classroom activity from the uploaded syllabus, lecture notes, tutorials and answer materials. Treat the syllabus as the authority for scope and learning outcomes. Treat lecture notes and supplied tutorial answers as the authority for facts and expected responses.
 
@@ -39,8 +40,13 @@ Add source filenames and page or slide references to speaker notes. If evidence 
 
 type PickedFile = { id: string; file: File; role: string; pages?: number; inspecting?: boolean };
 type DefaultReference = { name: string; slides: number; size: number };
-type JobView = { id: string; status: "queued" | "running" | "ready" | "failed" | "cancelled"; stage: string; progress: number; warnings: string[]; error?: string };
+type JobView = { id: string; status: "uploading" | "queued" | "running" | "ready" | "failed" | "cancelled"; stage: string; progress: number; warnings: string[]; error?: string };
 const STAGES = ["Preparing files", "Analysing syllabus", "Mapping content", "Creating paired questions", "Building decks", "Checking slides", "Ready"];
+const BUNDLED_REFERENCES: DefaultReference[] = [
+  { name: "Set A.pptx", slides: 6, size: 115_523 },
+  { name: "Set B.pptx", slides: 6, size: 115_421 },
+  { name: "Ans for Set A and B.pptx", slides: 6, size: 136_374 },
+];
 
 const inferRole = (name: string) => {
   const lower = name.toLowerCase();
@@ -57,7 +63,7 @@ export default function App() {
   const [materials, setMaterials] = useState<PickedFile[]>([]);
   const [syllabus, setSyllabus] = useState<File | null>(null);
   const [syllabusPages, setSyllabusPages] = useState<number | null>(null);
-  const [defaultReferences, setDefaultReferences] = useState<DefaultReference[]>([]);
+  const [defaultReferences, setDefaultReferences] = useState<DefaultReference[]>(BUNDLED_REFERENCES);
   const [referenceFiles, setReferenceFiles] = useState<File[]>([]);
   const [useDefaultReferences, setUseDefaultReferences] = useState(true);
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
@@ -69,19 +75,22 @@ export default function App() {
   const materialsRef = useRef<HTMLInputElement>(null);
   const syllabusRef = useRef<HTMLInputElement>(null);
   const referenceRef = useRef<HTMLInputElement>(null);
+  const generationAbortRef = useRef<AbortController | null>(null);
   const ready = useMemo(() => materials.length > 0 && syllabus && prompt.trim().length > 20 && !busy, [materials, syllabus, prompt, busy]);
 
   useEffect(() => {
-    void authFetch("/api/reference-defaults").then((response) => response.ok ? response.json() : { files: [] }).then((data) => setDefaultReferences(data.files ?? [])).catch(() => setDefaultReferences([]));
+    void authFetch("/api/reference-defaults").then((response) => response.ok ? response.json() : { files: BUNDLED_REFERENCES }).then((data) => setDefaultReferences(data.files?.length ? data.files : BUNDLED_REFERENCES)).catch(() => setDefaultReferences(BUNDLED_REFERENCES));
   }, []);
 
   const inspect = async (item: PickedFile) => {
+    if (serverlessMode) { setMaterials((files) => files.map((file) => file.id === item.id ? { ...file, inspecting: false } : file)); return; }
     const body = new FormData(); body.append("file", item.file);
     try { const result = await authFetch("/api/inspect", { method: "POST", body }); const data = await result.json(); if (result.ok) setMaterials((files) => files.map((file) => file.id === item.id ? { ...file, pages: data.pages, inspecting: false } : file)); else throw new Error(data.error); }
     catch { setMaterials((files) => files.map((file) => file.id === item.id ? { ...file, inspecting: false } : file)); }
   };
   const chooseSyllabus = async (file: File | null) => {
     setSyllabus(file); setSyllabusPages(null); if (!file) return;
+    if (serverlessMode) return;
     const body = new FormData(); body.append("file", file);
     try { const response = await authFetch("/api/inspect", { method: "POST", body }); const data = await response.json(); if (response.ok) setSyllabusPages(data.pages); } catch { /* checked again during generation */ }
   };
@@ -99,23 +108,76 @@ export default function App() {
     setReferenceFiles(valid); setUseDefaultReferences(false); setFormError("");
   };
 
+  const pollJob = async (id: string) => {
+    for (;;) {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      const progressResponse = await authFetch(`/api/jobs/${id}`); const next = await progressResponse.json();
+      if (!progressResponse.ok) throw new Error(next.error ?? "Could not read generation progress.");
+      setJob({ id, ...next });
+      if (["ready", "failed", "cancelled"].includes(next.status)) { setBusy(false); break; }
+    }
+  };
+
+  const generateCloud = async () => {
+    if (!syllabus || !supabase) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error("Your session has expired. Please sign in again.");
+    const id = crypto.randomUUID(); const uploadedPaths: string[] = [];
+    const uploadAbort = new AbortController(); generationAbortRef.current = uploadAbort;
+    setJob({ id, status: "uploading", stage: "Preparing files", progress: 1, warnings: [] });
+    const allFiles = [
+      ...materials.map((item) => ({ file: item.file, kind: "material" as const, role: item.role })),
+      { file: syllabus, kind: "syllabus" as const, role: "Syllabus" },
+      ...referenceFiles.map((file) => ({ file, kind: "reference" as const, role: "Reference format" })),
+    ];
+    const planned = allFiles.map((item) => ({
+      ...item,
+      path: `${session.user.id}/${id}/${item.kind}/${crypto.randomUUID()}-${storageSafeName(item.file.name)}`,
+    }));
+    const inputs = planned.map((item) => ({ kind: item.kind, path: item.path, name: item.file.name, role: item.role, size: item.file.size, mime: acceptedMime(item.file) }));
+    const totalBytes = allFiles.reduce((sum, item) => sum + item.file.size, 0); let completedBytes = 0; let reserved = false;
+    try {
+      const reserveResponse = await authFetch("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, inputs, useDefaultReferences, designPrompt: prompt, additionalPrompt: additional }) });
+      const reserveData = await reserveResponse.json(); if (!reserveResponse.ok) throw new Error(reserveData.error ?? "Could not reserve the generation job.");
+      reserved = true;
+      for (const item of planned) {
+        const before = completedBytes;
+        await uploadCloudFile(item.file, item.path, (uploaded) => setJob((current) => current ? { ...current, progress: Math.min(18, 1 + Math.round(((before + uploaded) / totalBytes) * 17)) } : current), uploadAbort.signal);
+        completedBytes += item.file.size; uploadedPaths.push(item.path);
+      }
+      const response = await authFetch(`/api/jobs/${id}/start`, { method: "POST" });
+      const data = await response.json(); if (!response.ok) throw new Error(data.error ?? "Could not start generation.");
+      setJob({ id, status: "queued", stage: "Preparing files", progress: 18, warnings: [] });
+      await pollJob(id);
+    } catch (error) {
+      if (reserved) await authFetch(`/api/jobs/${id}`, { method: "DELETE" }).catch(() => undefined);
+      else await removeCloudInputs(uploadedPaths);
+      throw error;
+    } finally {
+      if (generationAbortRef.current === uploadAbort) generationAbortRef.current = null;
+    }
+  };
+
   const generate = async () => {
     if (!syllabus) return; setBusy(true); setFormError(""); setJob(null);
     const body = new FormData(); materials.forEach((item) => body.append("materials", item.file)); body.append("syllabus", syllabus); referenceFiles.forEach((file) => body.append("references", file)); body.append("useDefaultReferences", String(useDefaultReferences)); body.append("designPrompt", prompt); body.append("additionalPrompt", additional); body.append("roles", JSON.stringify(Object.fromEntries(materials.map((item) => [item.file.name, item.role]))));
     try {
+      if (serverlessMode) { await generateCloud(); return; }
       const response = await authFetch("/api/jobs", { method: "POST", body }); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? "Could not start generation.");
       const id = data.jobId as string; setJob({ id, status: "queued", stage: STAGES[0], progress: 0, warnings: [] });
-      for (;;) {
-        await new Promise((resolve) => setTimeout(resolve, 1200));
-        const progressResponse = await authFetch(`/api/jobs/${id}`); const next = await progressResponse.json();
-        if (!progressResponse.ok) throw new Error(next.error ?? "Could not read generation progress.");
-        setJob({ id, ...next });
-        if (["ready", "failed", "cancelled"].includes(next.status)) { setBusy(false); break; }
-      }
-    } catch (error) { setBusy(false); setFormError(error instanceof Error ? error.message : String(error)); }
+      await pollJob(id);
+    } catch (error) {
+      setBusy(false);
+      if (!(error instanceof DOMException && error.name === "AbortError")) setFormError(error instanceof Error ? error.message : String(error));
+    }
   };
 
-  const cancel = async () => { if (job) await authFetch(`/api/jobs/${job.id}/cancel`, { method: "POST" }); setBusy(false); };
+  const cancel = async () => {
+    generationAbortRef.current?.abort();
+    if (job) await authFetch(`/api/jobs/${job.id}/cancel`, { method: "POST" });
+    setJob((current) => current ? { ...current, status: "cancelled", stage: current.stage } : current);
+    setBusy(false);
+  };
 
   const downloadArtifact = async (artifact: "setA" | "setB" | "answers" | "bundle") => {
     if (!job) return;
@@ -132,13 +194,12 @@ export default function App() {
   return (
     <main className="app-shell">
       <header className="masthead">
-        <div className="brand-mark" aria-hidden="true">A<span>B</span></div>
         <div>
           <p className="eyebrow">Teacher workspace</p>
           <h1>Collaborative Activity Generator</h1>
           <p className="subtitle">Turn your syllabus and teaching materials into paired group tasks and a compiled, editable PowerPoint debrief.</p>
         </div>
-        <div className="local-badge"><span /> Local & private</div>
+        <div className="local-badge"><span /> {serverlessMode ? "Secure teacher workspace" : "Local & private"}</div>
       </header>
 
       <section className="workflow" aria-label="Generation workflow">
@@ -166,7 +227,7 @@ export default function App() {
           </div>)}</div>}
 
           <button className={`dropzone syllabus-zone ${syllabus ? "has-file" : ""}`} type="button" onClick={() => syllabusRef.current?.click()}>
-            <span className="upload-icon">§</span><strong>{syllabus ? syllabus.name : "Syllabus document"}</strong><small>{syllabus ? `${fileSize(syllabus.size)} · ${syllabusPages ? `${syllabusPages} page${syllabusPages === 1 ? "" : "s"}` : "checking pages…"} · click to replace` : "Choose one PDF or Word file"}</small>
+            <span className="upload-icon">§</span><strong>{syllabus ? syllabus.name : "Syllabus document"}</strong><small>{syllabus ? `${fileSize(syllabus.size)} · ${serverlessMode ? "pages checked during generation" : syllabusPages ? `${syllabusPages} page${syllabusPages === 1 ? "" : "s"}` : "checking pages…"} · click to replace` : "Choose one PDF or Word file"}</small>
           </button>
           <input ref={syllabusRef} hidden type="file" accept=".pdf,.docx" onChange={(event) => void chooseSyllabus(event.target.files?.[0] ?? null)} />
 
