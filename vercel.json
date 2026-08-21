@@ -9,7 +9,7 @@
     "api/queues/process-activity.ts": {
       "maxDuration": 300,
       "memory": 2048,
-      "includeFiles": ["assets/templates/**", "node_modules/pptxgenjs/**"],
+      "includeFiles": "{assets/templates/**,node_modules/pptxgenjs/**}",
       "experimentalTriggers": [
         { "type": "queue/v2beta", "topic": "activity-generation" }
       ]
