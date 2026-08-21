@@ -411,7 +411,11 @@ Return only the CurriculumMap JSON.`,
         unresolvedCommands = commandWordIssues(spec, commandPolicy);
         unresolvedCurriculum = curriculumIssues(spec, curriculumMap);
       }
-      if (unresolvedCurriculum.length) throw new Error(`The curriculum-alignment audit could not be satisfied: ${unresolvedCurriculum.join(" ")}`);
+      if (unresolvedCurriculum.length) {
+        const warning = `Curriculum-alignment audit retained ${unresolvedCurriculum.length} unresolved source-adaptation issue(s).`;
+        spec.warnings.push(warning);
+        job.warnings.push(warning, ...unresolvedCurriculum);
+      }
       if (unresolvedGrounding.length) {
         const warning = `Source-grounding audit retained ${unresolvedGrounding.length} unresolved evidence reference issue(s).`;
         spec.warnings.push(warning);
@@ -426,7 +430,11 @@ Return only the CurriculumMap JSON.`,
         const commandRepair = await ai.models.generateContent({ model, contents: `Correct only the question command wording in this ActivitySpec. Do not alter subject facts, answers, evidence, question count or pair concepts. Use only terms in COMMAND POLICY, follow their definitions, give Set A and Set B the same leading command phrase, set commandWord to that exact phrase, and remove every unlisted command word including Analyse/Analyze.\n\nCOMMAND POLICY:\n${JSON.stringify(commandPolicy)}\n\nISSUES:\n${unresolvedCommands.join("\n")}\n\nACTIVITY SPEC:\n${JSON.stringify(spec)}\nReturn the complete corrected ActivitySpec only.`, config: { abortSignal: job.abort.signal, responseMimeType: "application/json", responseJsonSchema: geminiSchema(activitySpecSchema) } });
         spec = activitySpecSchema.parse(JSON.parse(commandRepair.text ?? "{}"));
         unresolvedCommands = commandWordIssues(spec, commandPolicy);
-        if (unresolvedCommands.length) throw new Error(`The syllabus command-word audit could not be satisfied: ${unresolvedCommands.join(" ")}`);
+        if (unresolvedCommands.length) {
+          const warning = `Syllabus command-word audit retained ${unresolvedCommands.length} unresolved wording issue(s).`;
+          spec.warnings.push(warning);
+          job.warnings.push(warning, ...unresolvedCommands);
+        }
       }
     }
     const actionableWarning = (warning: string) =>
