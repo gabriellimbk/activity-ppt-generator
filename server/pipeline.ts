@@ -303,8 +303,29 @@ export const calculationEligibilityIssues = (spec: ActivitySpec, curriculumMap: 
   return issues;
 };
 
+export const calculationSolvabilityIssues = (spec: ActivitySpec) => {
+  const issues: string[] = [];
+  const calculationTask = (prompt: string, commandWord: string) => /\bcalculate\b/i.test(`${commandWord} ${prompt}`)
+    || /\bdetermine\b[^.?!]{0,120}\b(?:relative atomic mass|molar mass|mass|moles?|amount|concentration|percentage|ratio|numerical value|enthalpy|energy|rate|yield)\b/i.test(prompt);
+  const visibleInputs = (question: ActivitySpec["questions"][number], prompt: string) => {
+    const visibleText = `${question.sharedPrompt} ${prompt}`;
+    if (/\d/.test(visibleText)) return true;
+    if (/\b(?:shown|displayed|given|supplied|from|using)\b[^.?!]{0,100}\b(?:table|graph|diagram|figure|data|results?)\b/i.test(visibleText)) {
+      if (question.responseType === "table") return Boolean(question.table && [...question.table.setAInputRows, ...question.table.setBInputRows].flat().some((value) => value.trim()));
+      return Boolean(question.graph || question.diagram);
+    }
+    return false;
+  };
+  for (const question of spec.questions) {
+    for (const [audience, tasks] of [["A", question.setATasks], ["B", question.setBTasks]] as const) {
+      for (const task of tasks) if (calculationTask(task.prompt, task.commandWord) && !visibleInputs(question, task.prompt)) issues.push(`Q${question.number} Set ${audience}: calculation task does not display the numerical data or referenced visual evidence required to solve it.`);
+    }
+  }
+  return issues;
+};
+
 export const pairingIssues = (spec: ActivitySpec) => {
-  const issues: string[] = [...variationCoverageIssues(spec), ...tableSolvabilityIssues(spec)];
+  const issues: string[] = [...variationCoverageIssues(spec), ...tableSolvabilityIssues(spec), ...calculationSolvabilityIssues(spec)];
   const command = (value: string) => value.match(/\b(explain|describe|state|identify|calculate|determine|compare|contrast|predict|deduce|sketch|plot|draw|complete|classify|justify|interpret|analyse|analyze)\b/i)?.[1].toLowerCase();
   const canonical = (value: string) => value.replace(/\*\*/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   const startsAsTask = (value: string) => /^(?:what|which|why|how|use|give|write|name|label|show|explain|describe|state|identify|calculate|determine|compare|contrast|predict|deduce|sketch|plot|draw|complete|classify|justify|interpret|analyse|analyze)\b/i.test(value.replace(/\*\*/g, "").trim());
@@ -504,7 +525,7 @@ Return only the CurriculumMap JSON.`,
         }
       }
     }
-    const blockingStructuralIssues = [...variationCoverageIssues(spec), ...tableSolvabilityIssues(spec), ...(appliedCurriculumMap ? calculationEligibilityIssues(spec, appliedCurriculumMap) : [])];
+    const blockingStructuralIssues = [...variationCoverageIssues(spec), ...tableSolvabilityIssues(spec), ...calculationSolvabilityIssues(spec), ...(appliedCurriculumMap ? calculationEligibilityIssues(spec, appliedCurriculumMap) : [])];
     if (blockingStructuralIssues.length) throw new Error(`Generation could not satisfy the required A/B variation and student-task solvability checks: ${blockingStructuralIssues.join(" ")}`);
     const actionableWarning = (warning: string) =>
       !/\b(?:does not|do not|did not) affect\b|\bnot applicable to (?:the )?(?:current|selected)\b/i.test(warning)

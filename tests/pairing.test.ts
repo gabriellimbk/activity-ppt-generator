@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculationEligibilityIssues, tableSolvabilityIssues, variationCoverageIssues, type CurriculumMap } from "../server/pipeline.js";
+import { calculationEligibilityIssues, calculationSolvabilityIssues, tableSolvabilityIssues, variationCoverageIssues, type CurriculumMap } from "../server/pipeline.js";
 import { activitySpecSchema, type ActivitySpec } from "../server/types.js";
 
 const makeSpec = (count = 5): ActivitySpec => activitySpecSchema.parse({
@@ -81,5 +81,13 @@ describe("paired activity structural validation", () => {
       expect.stringContaining("Q3 Set B"),
     ]);
     expect(calculationEligibilityIssues(spec, { subjectKind: "mathematics" } as CurriculumMap)).toEqual([]);
+  });
+
+  it("rejects calculations whose required inputs are absent from the student prompt", () => {
+    const spec = makeSpec(3);
+    spec.questions[2].setATasks[0] = { prompt: "Calculate the relative atomic mass of M and identify M.", answer: "87.8; strontium.", commandWord: "Calculate" };
+    expect(calculationSolvabilityIssues(spec)).toEqual([expect.stringContaining("Q3 Set A")]);
+    spec.questions[2].setATasks[0].prompt = "A 4.50 g sample forms 1.34 g of CO₂. Calculate the relative atomic mass of M.";
+    expect(calculationSolvabilityIssues(spec)).toEqual([]);
   });
 });
