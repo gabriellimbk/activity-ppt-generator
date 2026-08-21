@@ -264,7 +264,6 @@ export default function App() {
         <div className="progress-track"><span style={{ width: `${job.progress}%` }} /></div>
         <div className="stage-list">{STAGES.map((stage, index) => <span className={STAGES.indexOf(job.stage) >= index ? "done" : ""} key={stage}>{stage}</span>)}</div>
         {job.error && <div className="alert error">{job.error}</div>}
-        {job.warnings.length > 0 && <div className="alert warning"><strong>Completed with notes</strong>{job.warnings.map((warning) => <span key={warning}>{warning}</span>)}</div>}
         {job.status === "ready" && <div className="downloads">
           <button type="button" onClick={() => void downloadArtifact("setA")}>Download Set A</button><button type="button" onClick={() => void downloadArtifact("setB")}>Download Set B</button><button type="button" onClick={() => void downloadArtifact("answers")}>Download compiled answers</button><button type="button" className="zip" onClick={() => void downloadArtifact("bundle")}>Download all (.zip)</button>
         </div>}
