@@ -20,6 +20,8 @@ One or more questions may be identical across Set A and Set B. Use identical pro
 
 Prefer concise questions testing concepts, principles, theory, explanation, classification, interpretation, equations, graphs, tables or diagrams. Avoid unnecessarily long contexts, calculations or unfamiliar scenarios unless required by the syllabus or additional prompt. Where a suitable tutorial question exists, follow it closely and make only the minimal changes needed to create the paired Set A and Set B variants.
 
+Generate calculation questions only when the uploaded syllabus is primarily a mathematics syllabus. For science and every other subject, do not ask students to calculate or determine a numerical value, even when worked calculations appear in the uploaded materials. Prefer source-supported conceptual, descriptive, explanatory, comparative, classification, interpretation, equation, graph or diagram tasks instead.
+
 Begin each student deck with clear activity instructions. By default, tell students to work within their group, answer as many questions correctly as possible within the time limit, avoid online and lecture-note references, and use one one-time true/false teacher lifeline.
 
 The compiled answer deck must follow the same question order, show common material once, clearly label Set A and Set B material, and combine both halves into a coherent whole-class debrief. Answers must be complete, concise and supported by the uploaded materials. Each question must occupy exactly one compiled debrief slide. Never create separate shared-explanation, solution, continuation or answer-continued slides. Condense wording while preserving every marking point so the full common, Set A and Set B answer fits legibly on that one slide.

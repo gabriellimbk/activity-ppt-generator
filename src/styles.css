@@ -85,6 +85,7 @@ label { display: block; color: #3c554d; font-weight: 700; font-size: 12px; margi
 .alert { display: grid; gap: 5px; margin-top: 16px; padding: 12px 14px; border-radius: 9px; font-size: 12px; }
 .alert.error { color: #7f2e27; background: #fff0ee; border: 1px solid #efc2bc; }
 .alert.warning { color: #72501e; background: #fff8e7; border: 1px solid #edd9a6; }
+.job-panel .alert.warning { display: none; }
 .downloads { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin-top: 18px; }
 .downloads button, .cancel, .retry { border: 1px solid #aac1b6; border-radius: 8px; padding: 11px 13px; color: #244c41; background: #f6faf7; text-align: center; text-decoration: none; font-size: 12px; font-weight: 700; }
 .downloads button.zip { color: #fff; border-color: #173f36; background: #173f36; }

@@ -117,7 +117,9 @@ const curriculumTargetSchema = z.object({
   exclusions: z.array(z.string()).default([]),
 });
 const curriculumMapSchema = z.object({
-  topic: z.string(), targets: z.array(curriculumTargetSchema).min(3).max(20), globalExclusions: z.array(z.string()).default([]),
+  topic: z.string(),
+  subjectKind: z.enum(["mathematics", "other"]).default("other"),
+  targets: z.array(curriculumTargetSchema).min(3).max(20), globalExclusions: z.array(z.string()).default([]),
 });
 export type CurriculumMap = z.infer<typeof curriculumMapSchema>;
 const geminiSchema = (schema: z.ZodType) => {
@@ -287,6 +289,20 @@ export const tableSolvabilityIssues = (spec: ActivitySpec) => {
   return issues;
 };
 
+export const calculationEligibilityIssues = (spec: ActivitySpec, curriculumMap: CurriculumMap) => {
+  if (curriculumMap.subjectKind === "mathematics") return [];
+  const calculationTask = (prompt: string, commandWord: string) =>
+    /\bcalculate\b/i.test(commandWord) || /\bcalculate\b/i.test(prompt)
+    || /\bdetermine\b[^.?!]{0,120}\b(?:relative atomic mass|molar mass|mass|moles?|amount|concentration|percentage|ratio|numerical value|enthalpy|energy|rate|yield)\b/i.test(prompt);
+  const issues: string[] = [];
+  for (const question of spec.questions) {
+    for (const [audience, tasks] of [["A", question.setATasks], ["B", question.setBTasks]] as const) {
+      for (const task of tasks) if (calculationTask(task.prompt, task.commandWord)) issues.push(`Q${question.number} Set ${audience}: calculation task "${task.prompt.slice(0, 100)}" is not allowed because the uploaded syllabus is not a mathematics syllabus.`);
+    }
+  }
+  return issues;
+};
+
 export const pairingIssues = (spec: ActivitySpec) => {
   const issues: string[] = [...variationCoverageIssues(spec), ...tableSolvabilityIssues(spec)];
   const command = (value: string) => value.match(/\b(explain|describe|state|identify|calculate|determine|compare|contrast|predict|deduce|sketch|plot|draw|complete|classify|justify|interpret|analyse|analyze)\b/i)?.[1].toLowerCase();
@@ -410,6 +426,7 @@ export async function runPipeline(job: Job, materials: InputFile[], syllabus: In
         "A content heading or lecture definition is not an assessable question target unless the mapped syllabus learning outcome explicitly requires definition.",
         "Do not merge separate curriculum targets, syllabus outcomes or source rows into one synthetic compound task.",
         "Do not introduce numerical values absent from the selected target's lecture evidence or task anchors.",
+        "Unless the syllabus is primarily mathematics, do not create calculation questions. Science and other subjects may use notation, equations, graphs and source-supplied quantities only in non-calculation conceptual tasks.",
         "Reusing a central curriculum target is preferable to broadening into a weakly supported topic.",
       ];
       const syllabusSource = sourceFiles.find((file) => /syllabus/i.test(file.role));
@@ -421,6 +438,8 @@ export async function runPipeline(job: Job, materials: InputFile[], syllabus: In
         contents: `Build a binding curriculum eligibility map before any classroom questions are written.
 
 GLOBAL RULES:
+- Set subjectKind to mathematics only when the uploaded syllabus is primarily a mathematics syllabus. Chemistry, physics, biology, economics, computing and all other subjects are other, even when they contain equations or numerical examples.
+- When subjectKind is other, exclude calculation tasks and calculation-only targets from the activity.
 - A target is eligible only when an explicit syllabus learning outcome intersects explicit lecture-note teaching.
 - A syllabus content heading or a definition in lecture notes is not by itself an assessable target. Include Define/What is meant only when the syllabus learning outcome explicitly requires definition.
 - Tutorial questions and worked examples may supply task wording and response form only when they map to that syllabus/lecture intersection.
@@ -448,14 +467,16 @@ Return only the CurriculumMap JSON.`,
       let unresolvedPairing = pairingIssues(spec);
       let unresolvedCommands = commandWordIssues(spec, commandPolicy);
       let unresolvedCurriculum = curriculumIssues(spec, curriculumMap);
-      if (unresolvedGrounding.length || unresolvedPairing.length || unresolvedCommands.length || unresolvedCurriculum.length) {
-        unresolvedPairing = [...unresolvedPairing, ...unresolvedCurriculum.map((issue) => `CURRICULUM ALIGNMENT: ${issue}`)];
+      let unresolvedCalculations = calculationEligibilityIssues(spec, curriculumMap);
+      if (unresolvedGrounding.length || unresolvedPairing.length || unresolvedCommands.length || unresolvedCurriculum.length || unresolvedCalculations.length) {
+        unresolvedPairing = [...unresolvedPairing, ...unresolvedCurriculum.map((issue) => `CURRICULUM ALIGNMENT: ${issue}`), ...unresolvedCalculations.map((issue) => `CALCULATION ELIGIBILITY: ${issue}`)];
         const repair = await ai.models.generateContent({ model, contents: `Repair this ActivitySpec so it is strictly source-locked, every A/B pair has equivalent work, and every question follows the binding commandPolicy. The syllabus may define scope but may not serve as the sole evidence for expected answers. Use only the located evidence in SOURCE MAP files. Remove unsupported elaboration instead of replacing it with general knowledge. If a question pair cannot be fully supported or balanced, replace it with a pair that can. Keep exactly ${count} pairs and preserve the one-debrief-slide-per-question format. Every common, Set A and Set B answer must have its own evidence reference with an exact filename, exact page/slide location and a short faithful supporting quotation or paraphrase in note.\n\nDETERMINISTIC GROUNDING PROBLEMS:\n${unresolvedGrounding.join("\n") || "None"}\n\nDETERMINISTIC PAIRING PROBLEMS:\n${unresolvedPairing.join("\n") || "None"}\n\nDETERMINISTIC COMMAND-WORD PROBLEMS:\n${unresolvedCommands.join("\n") || "None"}\n\nUse only command terms listed in SOURCE MAP commandPolicy and apply each according to its glossary definition. Set A and Set B must use the same leading command phrase and commandWord must record it exactly. For graph pairs with different domains, create audience A and audience B series with independent labels; never force them onto one shared student scaffold. Every table task must provide meaningful columns and Set-specific row labels.\n\nSOURCE MAP:\n${JSON.stringify(sourceMap)}\n\nACTIVITY SPEC:\n${JSON.stringify(spec)}\nReturn the complete corrected ActivitySpec only.`, config: { abortSignal: job.abort.signal, responseMimeType: "application/json", responseJsonSchema: geminiSchema(activitySpecSchema) } });
         spec = activitySpecSchema.parse(JSON.parse(repair.text ?? "{}"));
         unresolvedGrounding = groundingIssues(spec, sourceFiles);
         unresolvedPairing = pairingIssues(spec);
         unresolvedCommands = commandWordIssues(spec, commandPolicy);
         unresolvedCurriculum = curriculumIssues(spec, curriculumMap);
+        unresolvedCalculations = calculationEligibilityIssues(spec, curriculumMap);
       }
       if (unresolvedCurriculum.length) {
         const warning = `Curriculum-alignment audit retained ${unresolvedCurriculum.length} unresolved source-adaptation issue(s).`;
@@ -483,7 +504,7 @@ Return only the CurriculumMap JSON.`,
         }
       }
     }
-    const blockingStructuralIssues = [...variationCoverageIssues(spec), ...tableSolvabilityIssues(spec)];
+    const blockingStructuralIssues = [...variationCoverageIssues(spec), ...tableSolvabilityIssues(spec), ...(appliedCurriculumMap ? calculationEligibilityIssues(spec, appliedCurriculumMap) : [])];
     if (blockingStructuralIssues.length) throw new Error(`Generation could not satisfy the required A/B variation and student-task solvability checks: ${blockingStructuralIssues.join(" ")}`);
     const actionableWarning = (warning: string) =>
       !/\b(?:does not|do not|did not) affect\b|\bnot applicable to (?:the )?(?:current|selected)\b/i.test(warning)

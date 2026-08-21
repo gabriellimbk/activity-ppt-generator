@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { tableSolvabilityIssues, variationCoverageIssues } from "../server/pipeline.js";
+import { calculationEligibilityIssues, tableSolvabilityIssues, variationCoverageIssues, type CurriculumMap } from "../server/pipeline.js";
 import { activitySpecSchema, type ActivitySpec } from "../server/types.js";
 
 const makeSpec = (count = 5): ActivitySpec => activitySpecSchema.parse({
@@ -69,5 +69,17 @@ describe("paired activity structural validation", () => {
     spec.questions[0].table!.setAInputRows = [["white precipitate", ""]];
     spec.questions[0].table!.setBInputRows = [["cream precipitate", ""]];
     expect(tableSolvabilityIssues(spec)).toEqual([]);
+  });
+
+  it("rejects calculation questions for every non-mathematics syllabus", () => {
+    const spec = makeSpec(3);
+    spec.questions[2].setATasks[0] = { prompt: "Calculate the relative atomic mass of M.", answer: "87.8", commandWord: "Calculate" };
+    spec.questions[2].setBTasks[0] = { prompt: "Determine the molar mass of compound X.", answer: "148 g mol⁻¹", commandWord: "Determine" };
+    const curriculum = { subjectKind: "other" } as CurriculumMap;
+    expect(calculationEligibilityIssues(spec, curriculum)).toEqual([
+      expect.stringContaining("Q3 Set A"),
+      expect.stringContaining("Q3 Set B"),
+    ]);
+    expect(calculationEligibilityIssues(spec, { subjectKind: "mathematics" } as CurriculumMap)).toEqual([]);
   });
 });
