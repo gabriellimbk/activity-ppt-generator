@@ -106,14 +106,14 @@ label { display: block; color: #3c554d; font-weight: 700; font-size: 12px; margi
 .guide-visual { position: relative; overflow: hidden; border: 1px solid #d8e0db; border-radius: 12px; background: #edf1ec; }
 .guide-visual img { display: block; width: 100%; height: auto; }
 .guide-focus { position: absolute; border: clamp(3px, .45vw, 7px) solid #e1281d; border-radius: 3px; pointer-events: none; }
-.guide-focus-one { left: 3.2%; top: 10.5%; width: 39.4%; height: 16.8%; }
-.guide-focus-two { left: 3.2%; top: 28.8%; width: 39.4%; height: 12.3%; }
-.guide-focus-three { left: 76.2%; top: 86.5%; width: 21.2%; height: 7.8%; }
+.guide-focus-one { left: 3.7%; top: 15.1%; width: 39.8%; height: 16.2%; }
+.guide-focus-two { left: 3.7%; top: 33.3%; width: 39.8%; height: 11.8%; }
+.guide-focus-three { left: 77.8%; top: 90.5%; width: 20.7%; height: 6.9%; }
 .guide-callout { position: absolute; display: flex; align-items: center; gap: 7px; padding: 6px 10px 6px 6px; border-radius: 999px; color: #fff; background: #d52d22; box-shadow: 0 3px 10px #67120d59; font-size: clamp(10px, 1.2vw, 15px); font-weight: 800; white-space: nowrap; }
 .guide-callout strong { display: grid; place-items: center; width: 25px; height: 25px; border-radius: 50%; color: #a61f17; background: #fff; font: 800 13px 'Libre Franklin'; }
-.guide-callout-one { left: 3%; top: 3.1%; }
-.guide-callout-two { left: 3%; top: 42%; }
-.guide-callout-three { right: 2.5%; top: 78.5%; }
+.guide-callout-one { left: 3%; top: 8.8%; }
+.guide-callout-two { left: 3%; top: 46%; }
+.guide-callout-three { right: 2.5%; top: 83.5%; }
 .guide-done { display: block; min-width: 130px; margin: 16px 0 0 auto; border: 0; border-radius: 9px; padding: 11px 18px; color: #fff; background: #173f36; font-weight: 800; }
 @media (max-width: 900px) { .app-shell { padding: 25px 18px 40px; } .content-grid { grid-template-columns: 1fr; } .masthead { grid-template-columns: 1fr; } .local-badge { justify-self: start; } .downloads { grid-template-columns: repeat(2, 1fr); } .stage-list { grid-template-columns: repeat(4, 1fr); } }
 @media (max-width: 600px) { .masthead { align-items: start; } .section-heading { align-items: flex-start; flex-direction: column; } .generate-bar { align-items: stretch; flex-direction: column; } .generate { width: 100%; min-width: 0; } .file-card { grid-template-columns: auto minmax(0, 1fr) auto; } .file-card select { grid-column: 2; } .guide-backdrop { padding: 10px; } .guide-modal { padding: 14px; } .guide-callout { padding: 4px 7px 4px 4px; gap: 4px; } .guide-callout strong { width: 20px; height: 20px; font-size: 10px; } }
