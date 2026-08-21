@@ -25,6 +25,8 @@ export const tableSchema = z.object({
   columns: z.array(z.string()).min(1).max(4),
   setARowLabels: z.array(z.string()).min(1).max(6),
   setBRowLabels: z.array(z.string()).min(1).max(6),
+  setAInputRows: z.array(z.array(z.string().max(180)).min(1).max(4)).max(6).default([]),
+  setBInputRows: z.array(z.array(z.string().max(180)).min(1).max(4)).max(6).default([]),
   setAAnswerRows: z.array(z.array(z.string().max(180)).min(1).max(4)).min(1).max(6),
   setBAnswerRows: z.array(z.array(z.string().max(180)).min(1).max(4)).min(1).max(6),
 }).optional();

@@ -24,7 +24,7 @@ describe("editable PowerPoint renderer", () => {
         commonAnswer: "Shared principle", difficulty: "standard" as const, expectedMinutes: 4,
         sources: [source], evidence: { common: [source], setA: [source], setB: [source] }, warnings: [],
         graph: i === 1 ? { xLabel: "Input", yLabel: "Radius / nm", series: [{ name: "Trend", xTickLabels: ["A", "B"], points: [{ x: 0, y: 0.1 }, { x: 1, y: 0.12 }] }] } : undefined,
-        table: i === 2 ? { rowHeader: "Substance", columns: ["Bonding", "Structure"], setARowLabels: ["A"], setBRowLabels: ["B"], setAAnswerRows: [["ionic", "giant lattice"]], setBAnswerRows: [["covalent", "simple molecular"]] } : undefined,
+        table: i === 2 ? { rowHeader: "Substance", columns: ["Given evidence", "Structure"], setARowLabels: ["A"], setBRowLabels: ["B"], setAInputRows: [["high melting point", ""]], setBInputRows: [["low melting point", ""]], setAAnswerRows: [["high melting point", "giant lattice"]], setBAnswerRows: [["low melting point", "simple molecular"]] } : undefined,
       };
     });
     const spec = activitySpecSchema.parse({
@@ -66,6 +66,7 @@ describe("editable PowerPoint renderer", () => {
       const studentATableSlide = await studentA.file("ppt/slides/slide4.xml")!.async("string");
       expect(studentATableSlide).toContain(">Complete<");
       expect(studentATableSlide).toContain("the table for substance A");
+      expect(studentATableSlide).toContain("high melting point");
       expect(studentATableSlide).not.toContain("giant lattice");
       if (process.platform === "win32") {
         for (const [name, path] of [["qa-a", paths.setA], ["qa-answers", paths.answers]] as const) {

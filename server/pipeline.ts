@@ -241,8 +241,54 @@ export const curriculumIssues = (spec: ActivitySpec, curriculumMap: CurriculumMa
   return issues;
 };
 
-const pairingIssues = (spec: ActivitySpec) => {
+const canonicalPrompt = (value: string) => value.replace(/\*\*/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const promptSimilarity = (left: string, right: string) => {
+  const a = new Set(canonicalPrompt(left).split(" ").filter(Boolean));
+  const b = new Set(canonicalPrompt(right).split(" ").filter(Boolean));
+  if (!a.size && !b.size) return 1;
+  const shared = [...a].filter((token) => b.has(token)).length;
+  return shared / Math.max(1, a.size + b.size - shared);
+};
+
+export const variationCoverageIssues = (spec: ActivitySpec) => {
+  const required = Math.ceil(spec.questions.length * 0.4);
+  const differentiated = spec.questions.filter((question) => {
+    if (question.setATasks.length !== question.setBTasks.length) return false;
+    return question.setATasks.some((task, index) => promptSimilarity(task.prompt, question.setBTasks[index]?.prompt ?? "") < 0.82);
+  }).length;
+  return differentiated >= required ? [] : [
+    `Activity has ${differentiated} genuinely differentiated numbered question(s); at least ${required} of ${spec.questions.length} (40%) must use different source-supported Set A and Set B tasks rather than identical or superficially reworded prompts.`,
+  ];
+};
+
+export const tableSolvabilityIssues = (spec: ActivitySpec) => {
   const issues: string[] = [];
+  const dependsOnDisplayedData = (value: string) =>
+    /\b(?:from|using|based on|according to)\b[^.?!]{0,100}\b(?:table|data|observations?|results?)\b|\b(?:observations?|data|results?)\b[^.?!]{0,100}\b(?:provided|given|shown|displayed|supplied|in the table)\b/i.test(value);
+  const opaqueLabel = (value: string) => /^(?:sample|unknown|specimen|substance)\s*[a-z0-9]+$/i.test(value.trim());
+  for (const question of spec.questions) {
+    if (question.responseType !== "table" || !question.table) continue;
+    const check = (audience: "A" | "B", prompts: string[], labels: string[], inputs: string[][]) => {
+      if (inputs.length) {
+        if (inputs.length !== labels.length) issues.push(`Q${question.number} Set ${audience}: ${labels.length} student table row label(s) but ${inputs.length} input row(s).`);
+        inputs.forEach((row, index) => {
+          if (row.length !== question.table!.columns.length) issues.push(`Q${question.number} Set ${audience}: student input row ${index + 1} has ${row.length} cell(s); expected ${question.table!.columns.length}. Use empty strings for response cells.`);
+        });
+      }
+      const requiresStimulus = prompts.some(dependsOnDisplayedData) || (labels.every(opaqueLabel) && prompts.some((prompt) => /\b(?:identify|deduce|determine|interpret)\b/i.test(prompt)));
+      if (!requiresStimulus) return;
+      const values = labels.flatMap((_, rowIndex) => question.table!.columns.map((__, columnIndex) => inputs[rowIndex]?.[columnIndex]?.trim() ?? ""));
+      if (!inputs.length || !values.some(Boolean)) issues.push(`Q${question.number} Set ${audience}: the task depends on supplied table data or observations, but the student table contains no visible input values.`);
+      if (values.length && values.every(Boolean)) issues.push(`Q${question.number} Set ${audience}: the student table is already fully populated even though the task requires a response; leave the required answer cell(s) blank.`);
+    };
+    check("A", question.setATasks.map((task) => task.prompt), question.table.setARowLabels, question.table.setAInputRows);
+    check("B", question.setBTasks.map((task) => task.prompt), question.table.setBRowLabels, question.table.setBInputRows);
+  }
+  return issues;
+};
+
+export const pairingIssues = (spec: ActivitySpec) => {
+  const issues: string[] = [...variationCoverageIssues(spec), ...tableSolvabilityIssues(spec)];
   const command = (value: string) => value.match(/\b(explain|describe|state|identify|calculate|determine|compare|contrast|predict|deduce|sketch|plot|draw|complete|classify|justify|interpret|analyse|analyze)\b/i)?.[1].toLowerCase();
   const canonical = (value: string) => value.replace(/\*\*/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   const startsAsTask = (value: string) => /^(?:what|which|why|how|use|give|write|name|label|show|explain|describe|state|identify|calculate|determine|compare|contrast|predict|deduce|sketch|plot|draw|complete|classify|justify|interpret|analyse|analyze)\b/i.test(value.replace(/\*\*/g, "").trim());
@@ -257,7 +303,7 @@ const pairingIssues = (spec: ActivitySpec) => {
   };
   const refersToStimulus = (value: string) => /\b(?:refer(?:ring)? to|shown|displayed|supplied|above|table|graph|diagram|data|passage|extract|image|figure)\b/i.test(value);
   const graphAction = (value: string) => /\b(?:sketch|plot|draw|complete|label|interpret)\b[^.?!]{0,90}\b(?:graph|curve|trend|axes?)\b|\b(?:graph|curve|axes?)\b[^.?!]{0,90}\b(?:sketch|plot|draw|complete|label|interpret)\b/i.test(value);
-  const tableAction = (value: string) => /\b(?:complet(?:e|es|ed|ing)|fill(?:s|ed|ing)?(?: in)?|populat(?:e|es|ed|ing)|construct(?:s|ed|ing)?)\b[^.?!]{0,90}\btable\b|\btable\b[^.?!]{0,90}\b(?:complet(?:e|es|ed|ing)|fill(?:s|ed|ing)?(?: in)?|populat(?:e|es|ed|ing)|construct(?:s|ed|ing)?)\b/i.test(value);
+  const tableAction = (value: string) => /\b(?:complet(?:e|es|ed|ing)|fill(?:s|ed|ing)?(?: in)?|populat(?:e|es|ed|ing)|construct(?:s|ed|ing)?)\b[^.?!]{0,90}\btable\b|\b(?:identify|deduce|determine|interpret)\b[^.?!]{0,110}\b(?:table|data|observations?|results?)\b|\b(?:table|data|observations?|results?)\b[^.?!]{0,110}\b(?:identify|deduce|determine|interpret)\b|\btable\b[^.?!]{0,90}\b(?:complet(?:e|es|ed|ing)|fill(?:s|ed|ing)?(?: in)?|populat(?:e|es|ed|ing)|construct(?:s|ed|ing)?)\b/i.test(value);
   const verbalAction = (value: string) => /\b(?:explain|describe|justify|deduce|predict|compare|contrast|interpret|state|identify)\b/i.test(value);
   const causalAnswer = (value: string) => /\b(?:because|due to|therefore|hence|as a result|caused by|results? from|increased? nuclear|shielding|attraction)\b/i.test(value);
   for (const question of spec.questions) {
@@ -327,7 +373,7 @@ export async function runPipeline(job: Job, materials: InputFile[], syllabus: In
     for (const warning of normalized.flatMap((file) => file.warning ? [file.warning] : [])) job.warnings.push(warning);
     const rawCount = requestedCount(additionalPrompt); const count = Math.max(3, Math.min(8, rawCount));
     if (rawCount !== count) job.warnings.push(`Requested ${rawCount} questions; adjusted to the supported range (${count}).`);
-    additionalPrompt = `IMMUTABLE TASK-UNION, RESPONSE-CONTRACT AND LAYOUT RULE: Each numbered item may contain one or two questions for Set A and the same number for Set B. Store them individually in setATasks and setBTasks, in counterpart order. Set sharedStimulusRequired=false by default. Set it true only when students must actually inspect shared data, a passage, quotation, image, equation, graph, table or diagram displayed on the slide and the task wording explicitly refers to that stimulus. Never create a context column merely for a topic description, orientation, summary or general background; without essential shared stimulus, use the full slide for questions and working space. sharedPrompt must not contain an instruction, command word, question mark, hidden task, model answer, definition, conclusion or wording that substantially reveals any task answer. A question may be identical across Set A and Set B. In that case, make its prompt and answer text exactly identical. The compiled answer slide must display the union of unique questions: shared identical questions once, plus each Set-specific question once. For example, two questions in A and two in B with one identical question produce three questions and three answers in the compiled slide. When a compiled slide contains three or more unique questions, condense every answer to essential source-supported marking points (normally no more than about 45 words). The response form must match the visible command exactly. For a pure Sketch, Plot or Draw task, the completed visual is the answer; never attach unasked Describe or Explain prose. If explanation is required, add a separate explicit counterpart task in both sets. Use responseType=table only when every displayed task explicitly asks students to complete, fill, populate or construct the table. Store the label-column heading in rowHeader, response headings only in columns, and complete every answer cell in setAAnswerRows and setBAnswerRows. A plain Describe or Explain task must use responseType=text.\n\n${additionalPrompt}`;
+    additionalPrompt = `IMMUTABLE TASK-UNION, RESPONSE-CONTRACT AND LAYOUT RULE: Each numbered item may contain one or two questions for Set A and the same number for Set B. Store them individually in setATasks and setBTasks, in counterpart order. Set sharedStimulusRequired=false by default. Set it true only when students must actually inspect shared data, a passage, quotation, image, equation, graph, table or diagram displayed on the slide and the task wording explicitly refers to that stimulus. Never create a context column merely for a topic description, orientation, summary or general background; without essential shared stimulus, use the full slide for questions and working space. sharedPrompt must not contain an instruction, command word, question mark, hidden task, model answer, definition, conclusion or wording that substantially reveals any task answer. A question may be identical across Set A and Set B, but at least 40% of all numbered questions must use genuinely different source-supported examples, cases or supplied data in Set A and Set B. Superficial rewording does not count. In an identical pair, make prompt and answer text exactly identical. The compiled answer slide must display the union of unique questions: shared identical questions once, plus each Set-specific question once. For example, two questions in A and two in B with one identical question produce three questions and three answers in the compiled slide. When a compiled slide contains three or more unique questions, condense every answer to essential source-supported marking points (normally no more than about 45 words). The response form must match the visible command exactly. For a pure Sketch, Plot or Draw task, the completed visual is the answer; never attach unasked Describe or Explain prose. If explanation is required, add a separate explicit counterpart task in both sets. Use responseType=table only when every displayed task explicitly asks students to complete, fill, populate or construct the table, or identify, deduce or interpret from student-visible table evidence. Store supplied values in setAInputRows and setBInputRows, using empty strings only for cells students must answer. Never refer to provided observations, results or data unless those values appear in the relevant student input rows. Store the label-column heading in rowHeader, response headings only in columns, and complete every answer cell in setAAnswerRows and setBAnswerRows. A plain Describe or Explain task must use responseType=text.\n\n${additionalPrompt}`;
     let spec: ActivitySpec; let appliedCommandPolicy: CommandPolicy | undefined; let appliedCurriculumMap: CurriculumMap | undefined;
     if (process.env.GEMINI_FAKE === "1") {
       setStage(job, "Analysing syllabus", 24); spec = mockSpec(normalized, count);
@@ -437,6 +483,8 @@ Return only the CurriculumMap JSON.`,
         }
       }
     }
+    const blockingStructuralIssues = [...variationCoverageIssues(spec), ...tableSolvabilityIssues(spec)];
+    if (blockingStructuralIssues.length) throw new Error(`Generation could not satisfy the required A/B variation and student-task solvability checks: ${blockingStructuralIssues.join(" ")}`);
     const actionableWarning = (warning: string) =>
       !/\b(?:does not|do not|did not) affect\b|\bnot applicable to (?:the )?(?:current|selected)\b/i.test(warning)
       && !/^(?:ensure|verify|check|confirm)\b/i.test(warning.trim())

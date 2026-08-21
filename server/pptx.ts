@@ -156,10 +156,14 @@ function makeDeck(spec: ActivitySpec, mode: "A" | "B" | "answers") {
   const drawBlankTable = (slide: any, q: ActivitySpec["questions"][number], audience: "A" | "B", region: Region) => {
     const columns = q.table?.columns ?? ["Response"];
     const rowLabels = audience === "A" ? q.table?.setARowLabels : q.table?.setBRowLabels;
+    const inputRows = audience === "A" ? q.table?.setAInputRows : q.table?.setBInputRows;
     const labels = rowLabels?.length ? rowLabels : ["1", "2", "3"];
     const headings = [q.table?.rowHeader ?? "Item", ...columns];
     const header = headings.map((text) => ({ text: unicodeScienceText(text), options: { bold: true, align: "center", fill: { color: "E7E7E7" } } }));
-    const rows = labels.map((label) => [({ text: unicodeScienceText(label), options: { bold: true, fill: { color: "F4F4F4" } } }), ...columns.map(() => "")]);
+    const rows = labels.map((label, rowIndex) => [
+      ({ text: unicodeScienceText(label), options: { bold: true, fill: { color: "F4F4F4" } } }),
+      ...columns.map((_, columnIndex) => unicodeScienceText(inputRows?.[rowIndex]?.[columnIndex] ?? "")),
+    ]);
     slide.addTable([header, ...rows], { x: region.x, y: region.y, w: region.w, h: region.h, border: { type: "solid", color: c.ink, pt: 1 }, fill: { color: c.white }, color: c.ink, fontFace: spec.design.bodyFont, fontSize: 13.5, margin: 0.06, valign: "middle" });
   };
 
