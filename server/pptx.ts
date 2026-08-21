@@ -1,10 +1,13 @@
 import { basename, join } from "node:path";
-import { createRequire } from "node:module";
+import PptxGenJSImport from "pptxgenjs";
 import JSZip from "jszip";
 import { readFile, writeFile } from "node:fs/promises";
 import type { ActivitySpec } from "./types.js";
 import { plainScienceText, scienceRuns, unicodeScienceText } from "./notation.js";
-const PptxGenJS = createRequire(import.meta.url)("pptxgenjs");
+
+// PptxGenJS 4's declaration is interpreted as a module namespace under NodeNext,
+// while its ESM runtime default export is the presentation constructor.
+const PptxGenJS = PptxGenJSImport as unknown as new () => any;
 
 const clean = (hex: string) => hex.replace("#", "").toUpperCase();
 const safeTopic = (topic: string) => plainScienceText(topic).replace(/[<>:"/\\|?*\x00-\x1F]/g, " ").replace(/\s+/g, " ").trim().slice(0, 70) || "Collaborative_Activity";
