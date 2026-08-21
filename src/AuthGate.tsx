@@ -14,14 +14,16 @@ function GuideModal({ onClose }: { onClose: () => void }) {
   return <div className="guide-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="guide-modal" role="dialog" aria-modal="true" aria-labelledby="guide-title">
       <div className="guide-heading"><div><p className="eyebrow">Quick guide</p><h2 id="guide-title">Create your PowerPoints in 3 steps</h2></div><button type="button" className="guide-close" aria-label="Close guide" onClick={onClose}>×</button></div>
+      <div className="guide-legend" aria-label="Guide steps">
+        <div><strong>1</strong><span>Upload lecture materials</span></div>
+        <div><strong>2</strong><span>Upload syllabus</span></div>
+        <div><strong>3</strong><span>Generate PowerPoints</span></div>
+      </div>
       <div className="guide-visual">
         <img src="/collaborative-activity-user-guide.png" alt="Collaborative Activity Generator upload and generate areas" />
         <span className="guide-focus guide-focus-one" />
         <span className="guide-focus guide-focus-two" />
         <span className="guide-focus guide-focus-three" />
-        <div className="guide-callout guide-callout-one"><strong>1</strong><span>Upload lecture materials</span></div>
-        <div className="guide-callout guide-callout-two"><strong>2</strong><span>Upload syllabus</span></div>
-        <div className="guide-callout guide-callout-three"><strong>3</strong><span>Generate PowerPoints</span></div>
       </div>
       <button type="button" className="guide-done" onClick={onClose}>Got it</button>
     </section>
