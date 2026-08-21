@@ -205,12 +205,6 @@ export default function App() {
         <div className="local-badge"><span /> {serverlessMode ? "Secure teacher workspace" : "Local & private"}</div>
       </header>
 
-      <section className="workflow" aria-label="Generation workflow">
-        {[["01", "Add materials"], ["02", "Set the brief"], ["03", "Generate decks"]].map(([number, label], index) => (
-          <div className={`workflow-step ${index === 0 ? "active" : ""}`} key={number}><span>{number}</span><strong>{label}</strong></div>
-        ))}
-      </section>
-
       <div className="content-grid">
         <section className="panel upload-panel">
           <div className="section-heading"><div><span className="section-number">1</span><h2>Source materials</h2></div><p>PDF, Word or PowerPoint · up to 50 MB each</p></div>

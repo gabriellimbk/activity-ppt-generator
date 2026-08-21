@@ -2,6 +2,32 @@ import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { allowedEmailDomain, allowOtpSignups, supabase, supabaseConfigured } from "./supabase";
 
+const GUIDE_SESSION_KEY = "collaborative-activity-guide-seen";
+
+function GuideModal({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  return <div className="guide-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="guide-modal" role="dialog" aria-modal="true" aria-labelledby="guide-title">
+      <div className="guide-heading"><div><p className="eyebrow">Quick guide</p><h2 id="guide-title">Create your PowerPoints in 3 steps</h2></div><button type="button" className="guide-close" aria-label="Close guide" onClick={onClose}>×</button></div>
+      <div className="guide-visual">
+        <img src="/collaborative-activity-user-guide.png" alt="Collaborative Activity Generator upload and generate areas" />
+        <span className="guide-focus guide-focus-one" />
+        <span className="guide-focus guide-focus-two" />
+        <span className="guide-focus guide-focus-three" />
+        <div className="guide-callout guide-callout-one"><strong>1</strong><span>Upload lecture materials</span></div>
+        <div className="guide-callout guide-callout-two"><strong>2</strong><span>Upload syllabus</span></div>
+        <div className="guide-callout guide-callout-three"><strong>3</strong><span>Generate PowerPoints</span></div>
+      </div>
+      <button type="button" className="guide-done" onClick={onClose}>Got it</button>
+    </section>
+  </div>;
+}
+
 export default function AuthGate({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [checking, setChecking] = useState(Boolean(supabase));
@@ -10,13 +36,23 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   const [codeSent, setCodeSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
     if (!supabase) return;
-    void supabase.auth.getSession().then(({ data }) => { setSession(data.session); setChecking(false); });
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
+    const receiveSession = (nextSession: Session | null) => {
+      setSession(nextSession);
+      if (nextSession && window.sessionStorage.getItem(GUIDE_SESSION_KEY) !== "1") setShowGuide(true);
+    };
+    void supabase.auth.getSession().then(({ data }) => { receiveSession(data.session); setChecking(false); });
+    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => receiveSession(nextSession));
     return () => data.subscription.unsubscribe();
   }, []);
+
+  const closeGuide = () => {
+    window.sessionStorage.setItem(GUIDE_SESSION_KEY, "1");
+    setShowGuide(false);
+  };
 
   const requestCode = async () => {
     if (!supabase) return;
@@ -62,5 +98,5 @@ export default function AuthGate({ children }: { children: ReactNode }) {
     {message && <p className="auth-message" role="status">{message}</p>}
   </section></main>;
 
-  return <><div className="session-bar"><span>Signed in as <strong>{session.user.email}</strong></span><button type="button" onClick={() => void supabase!.auth.signOut()}>Sign out</button></div>{children}</>;
+  return <><div className="session-bar"><span>Signed in as <strong>{session.user.email}</strong></span><button type="button" onClick={() => setShowGuide(true)}>Guide</button><button type="button" onClick={() => void supabase!.auth.signOut()}>Sign out</button></div>{children}{showGuide && <GuideModal onClose={closeGuide} />}</>;
 }
