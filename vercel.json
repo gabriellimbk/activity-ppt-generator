@@ -14,6 +14,11 @@
         { "type": "queue/v2beta", "topic": "activity-generation" }
       ]
     },
+    "api/internal/resume-job.ts": {
+      "maxDuration": 300,
+      "memory": 2048,
+      "includeFiles": "{assets/templates/**,node_modules/pptxgenjs/**}"
+    },
     "api/reference-defaults.ts": {
       "maxDuration": 30,
       "includeFiles": "assets/templates/**"
