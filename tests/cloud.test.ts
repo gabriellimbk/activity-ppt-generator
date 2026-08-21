@@ -4,6 +4,9 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createCloudJobSchema } from "../server/cloud/contracts.js";
 import { normalize } from "../server/pipeline.js";
+import { readJsonBody } from "../server/cloud/http.js";
+import type { VercelRequest } from "@vercel/node";
+import { Readable } from "node:stream";
 
 const jobId = "11111111-1111-4111-8111-111111111111";
 const input = (kind: "material" | "syllabus" | "reference", name: string) => ({
@@ -32,6 +35,24 @@ describe("serverless job contract", () => {
     expect(() => createCloudJobSchema.parse({ ...base, inputs: [input("material", "lecture.pptx"), input("material", "tutorial.pptx")] })).toThrow(/syllabus/i);
     expect(() => createCloudJobSchema.parse({ ...base, inputs: [input("syllabus", "one.pdf"), input("syllabus", "two.pdf"), input("material", "lecture.pptx")] })).toThrow(/syllabus/i);
     expect(() => createCloudJobSchema.parse({ ...base, inputs: [{ ...input("syllabus", "one.pdf"), size: 50 * 1024 * 1024 + 1 }, input("material", "lecture.pptx")] })).toThrow();
+  });
+});
+
+describe("Vercel request-body compatibility", () => {
+  it("accepts parsed JSON, text, Buffer, and raw request streams", async () => {
+    const payload = { id: jobId, value: "ok" };
+    for (const body of [payload, JSON.stringify(payload), Buffer.from(JSON.stringify(payload))]) {
+      expect(await readJsonBody({ body } as VercelRequest)).toEqual(payload);
+    }
+    const stream = Readable.from([Buffer.from(JSON.stringify(payload))]) as VercelRequest;
+    Object.defineProperty(stream, "body", { value: undefined });
+    expect(await readJsonBody(stream)).toEqual(payload);
+  });
+
+  it("reports an actionable error for an empty body", async () => {
+    const stream = Readable.from([]) as VercelRequest;
+    Object.defineProperty(stream, "body", { value: undefined });
+    await expect(readJsonBody(stream)).rejects.toThrow(/body is empty/i);
   });
 });
 

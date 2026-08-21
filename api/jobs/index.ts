@@ -1,13 +1,13 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createCloudJobSchema } from "../../server/cloud/contracts.js";
-import { authenticateRequest, rejectMethod, sendError } from "../../server/cloud/http.js";
+import { authenticateRequest, readJsonBody, rejectMethod, sendError } from "../../server/cloud/http.js";
 import { createAdminClient } from "../../server/cloud/supabase.js";
 
 export default async function handler(request: VercelRequest, response: VercelResponse) {
   if (request.method !== "POST") return rejectMethod(response, ["POST"]);
   try {
     const { user } = await authenticateRequest(request);
-    const body = createCloudJobSchema.parse(request.body);
+    const body = createCloudJobSchema.parse(await readJsonBody(request));
     const prefix = `${user.id}/${body.id}/`;
     if (body.inputs.some((input) => !input.path.startsWith(prefix) || input.path.includes(".."))) return response.status(400).json({ error: "An uploaded file path is outside this job." });
     const admin = createAdminClient();
