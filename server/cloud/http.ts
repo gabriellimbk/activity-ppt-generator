@@ -8,11 +8,19 @@ export const authenticateRequest = (request: VercelRequest) => authenticateAutho
 export const rejectMethod = (response: VercelResponse, allowed: string[]) => response.status(405).setHeader("Allow", allowed.join(", ")).json({ error: "Method not allowed." });
 export async function readJsonBody(request: VercelRequest): Promise<unknown> {
   const supplied = request.body;
-  if (supplied && typeof supplied === "object" && !Buffer.isBuffer(supplied)) return supplied;
+  if (supplied && typeof supplied === "object" && !Buffer.isBuffer(supplied)) {
+    const payload = (supplied as Record<string, unknown>).payload;
+    if (typeof payload === "string") {
+      try { return JSON.parse(payload); }
+      catch { throw Object.assign(new Error("The encoded request payload is not valid JSON."), { statusCode: 400 }); }
+    }
+    return supplied;
+  }
   if (typeof supplied === "string" || Buffer.isBuffer(supplied)) {
     const text = Buffer.isBuffer(supplied) ? supplied.toString("utf8") : supplied;
     if (!text.trim()) throw Object.assign(new Error("The request body is empty."), { statusCode: 400 });
-    try { return JSON.parse(text); }
+    const encodedPayload = new URLSearchParams(text).get("payload");
+    try { return JSON.parse(encodedPayload ?? text); }
     catch { throw Object.assign(new Error("The request body is not valid JSON."), { statusCode: 400 }); }
   }
   const chunks: Buffer[] = [];

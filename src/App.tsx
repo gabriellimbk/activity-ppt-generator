@@ -137,7 +137,8 @@ export default function App() {
     const inputs = planned.map((item) => ({ kind: item.kind, path: item.path, name: item.file.name, role: item.role, size: item.file.size, mime: acceptedMime(item.file) }));
     const totalBytes = allFiles.reduce((sum, item) => sum + item.file.size, 0); let completedBytes = 0; let reserved = false;
     try {
-      const reserveResponse = await authFetch("/api/jobs", { method: "POST", headers: { "Content-Type": "text/plain;charset=UTF-8" }, body: JSON.stringify({ id, inputs, useDefaultReferences, designPrompt: prompt, additionalPrompt: additional }) });
+      const payload = JSON.stringify({ id, inputs, useDefaultReferences, designPrompt: prompt, additionalPrompt: additional });
+      const reserveResponse = await authFetch("/api/jobs", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ payload }).toString() });
       const reserveData = await reserveResponse.json(); if (!reserveResponse.ok) throw new Error(reserveData.error ?? "Could not reserve the generation job.");
       reserved = true;
       for (const item of planned) {

@@ -47,6 +47,8 @@ describe("Vercel request-body compatibility", () => {
     const stream = Readable.from([Buffer.from(JSON.stringify(payload))]) as VercelRequest;
     Object.defineProperty(stream, "body", { value: undefined });
     expect(await readJsonBody(stream)).toEqual(payload);
+    expect(await readJsonBody({ body: { payload: JSON.stringify(payload) } } as VercelRequest)).toEqual(payload);
+    expect(await readJsonBody({ body: new URLSearchParams({ payload: JSON.stringify(payload) }).toString() } as VercelRequest)).toEqual(payload);
   });
 
   it("reports an actionable error for an empty body", async () => {
